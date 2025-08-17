@@ -51,8 +51,10 @@ responsiveness under varying light conditions. To overcome
 this, artificial light was used to simulate different scenarios,
 but replicating real-world lighting proved challenging for fine-
 tuning the system.
+
 #System Architecture: The system was designed with 2
 different parts, they are:
+
 1. Controller: The controller unit obtains live light intensity
 information from the actuator and enables users to adjust the
 desired light intensity using manual input or the mobile app,
