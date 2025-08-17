@@ -43,3 +43,33 @@ the current readings and the user-defined target intensity.
 Keeping the devices synchronized in this fast-paced
 environment, especially when the user adjusts the target
 intensity, was a critical challenge.
+3. Sun Light Challenge in prototype: One challenge during
+prototype testing was inconsistent sunlight availability, as the
+system relies on real-time LDR sensor readings to adjust the
+sunshade. This made it difficult to accurately test the system's
+responsiveness under varying light conditions. To overcome
+this, artificial light was used to simulate different scenarios,
+but replicating real-world lighting proved challenging for fine-
+tuning the system.
+##System Architecture: The system was designed with 2
+different parts, they are:
+1. Controller: The controller unit obtains live light intensity
+information from the actuator and enables users to adjust the
+desired light intensity using manual input or the mobile app,
+Blynk. The Blynk app offers users another way to control the
+system from a distance, allowing them to send commands to
+the controller to customize the sunshade according to their
+liking. Moreover, the controller also includes an LCD display to
+provide real-time information on the current light intensity,
+target intensity, and sunshade position. This enables users to
+check the device's status on the system itself, eliminating the
+need to use the mobile app. Wi-Fi and the UDP protocol enable
+seamless data exchange and real-time system operation
+through wireless communication between the controller and
+the actuator.
+2. Actuator: The controller receives data on current light
+intensity from an LDR sensor in the actuator unit. The actuator
+changes the position of the sunshade as per the instructions
+from the controller. It operates a servo motor to manually
+adjust the sunshade, guaranteeing that the indoor light levels
+correspond to the user's specified intensity goal.
