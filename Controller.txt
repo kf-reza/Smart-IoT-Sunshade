@@ -1,0 +1,138 @@
+Controller:
+
+#include <WiFi.h>
+#include <WiFiUdp.h>
+#include <LiquidCrystal_I2C.h>  // Include the LCD library
+#include <Wire.h>                // Include Wire library for I2C
+
+// Wi-Fi credentials
+const char* ssid = "IoT-AP";
+const char* password = "MySecurePassword";
+
+// UDP settings
+WiFiUDP udp;
+const char* udpAddress = "192.168.199.109";  // IP address of the Actuator (receiver)
+const int udpPort = 1234;                     // Port to send and receive data
+
+// Define Potentiometer pin
+#define POT_PIN 5  // Analog pin connected to potentiometer
+
+char incomingPacket[255];  // Buffer for incoming packets
+
+// Initialize the LCD (I2C address 0x27, 16 columns, 2 rows)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Variables to hold the values for display
+int potValue = 0;
+int ldrValue = -1;
+int servoPosition = -1;
+int previousServoPosition = -1;  // Store previous servo position to calculate movement
+String messageToDisplay = "";  // Store the message to scroll
+int scrollIndex = 0;  // Track the current scrolling position
+String receivedMessage = "";  // Declare receivedMessage globally to be accessible
+
+void setup() {
+  // Start the serial communication
+  Serial.begin(115200);
+
+  // Initialize the LCD
+  Wire.begin(10, 11); // Initialize I2C with SDA on GPIO 10 and SCL on GPIO 11
+  lcd.begin(16, 2);
+  lcd.backlight();  // Turn on the backlight
+
+  // Connect to Wi-Fi network
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+
+  // Wait until the ESP32 connects to the Wi-Fi
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to Wi-Fi");
+
+  // Print the IP address of the controller
+  Serial.print("Controller IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  // Start the UDP connection
+  udp.begin(udpPort);
+}
+
+void loop() {
+  // Read the value from the potentiometer
+  potValue = analogRead(POT_PIN);  // Range: 0 to 4095
+
+  // Send the potentiometer value to the actuator every 2 seconds
+  String message = "POT:" + String(potValue);  // Prefix with "POT:" to differentiate
+  udp.beginPacket(udpAddress, udpPort);        // Prepare to send packet
+  udp.print(message);                           // Send the potentiometer value
+  udp.endPacket();                              // Send the packet
+
+  // Print the potentiometer value locally on the controller
+  Serial.print("Potentiometer Value (Controller): ");
+  Serial.println(potValue);
+
+  // Check if there's any UDP packet available from the actuator (LDR value and Servo Position)
+  int packetSize = udp.parsePacket();
+  if (packetSize) {
+    // Read the incoming packet (LDR value and Servo Position from actuator)
+    int len = udp.read(incomingPacket, 255);
+    if (len > 0) {
+      incomingPacket[len] = 0;  // Null-terminate the string
+      receivedMessage = String(incomingPacket);  // Store the received message in the global variable
+
+      // Print the received message for debugging
+      Serial.print("Received message: ");
+      Serial.println(receivedMessage); // Add this line to see the incoming message
+
+      // Check if the received message contains LDR or Servo information
+      if (receivedMessage.startsWith("LDR:")) {
+        ldrValue = receivedMessage.substring(4).toInt();  // Extract the LDR value
+        Serial.print("LDR Value (from Actuator): ");
+        Serial.println(ldrValue);
+      } else if (receivedMessage.startsWith("SERVO:")) {
+        servoPosition = receivedMessage.substring(6).toInt();  // Extract the Servo position
+
+        // Calculate how much the servo moved (in degrees)
+        if (previousServoPosition != -1) {
+          int servoMovement = abs(servoPosition - previousServoPosition);
+          Serial.print("Servo moved by (degrees): ");
+          Serial.println(servoMovement);
+
+          // Prepare the message to scroll on the LCD
+          messageToDisplay = "SRV MOV:" + String(servoMovement) + " deg ";
+          scrollIndex = 0;  // Reset the scroll index for a new message
+        }
+
+        // Update the previous servo position
+        previousServoPosition = servoPosition;
+
+        Serial.print("Servo Position (from Actuator): ");
+        Serial.println(servoPosition);
+      }
+    }
+  }
+
+  // Scroll the message on the first row of the LCD
+  if (messageToDisplay.length() > 16) {
+    lcd.setCursor(0, 0);
+    lcd.print(messageToDisplay.substring(scrollIndex, scrollIndex + 16));  // Display part of the message
+    scrollIndex++;
+    if (scrollIndex + 16 > messageToDisplay.length()) {
+      scrollIndex = 0;  // Reset scroll when the end is reached
+    }
+  } else {
+    // If the message is shorter than 16 characters, print from the 9th character onward
+    lcd.setCursor(0, 0);
+    lcd.print(receivedMessage.substring(9));  // Start printing from the 9th character
+  }
+
+  // Display Potentiometer and LDR values on the second row
+  lcd.setCursor(0, 1);
+  lcd.print(" INTENSITY:");
+  lcd.print(ldrValue);
+
+  delay(300);  // Reduce the delay for smoother scrolling
+}

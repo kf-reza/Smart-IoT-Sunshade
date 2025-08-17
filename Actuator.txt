@@ -1,0 +1,206 @@
+Actuator:
+
+#include <WiFi.h>
+#include <WiFiUdp.h>
+#include <ESP32Servo.h>
+#include <WebServer.h>
+
+// Wi-Fi credentials
+const char* ssid = "IoT-AP";
+const char* password = "MySecurePassword";
+
+// UDP settings
+WiFiUDP udp;
+const char* udpAddress = "192.168.199.71";  // IP address of the Controller (receiver)
+const int udpPort = 1234;                   // Port to send and receive data
+
+// Web server on port 80
+WebServer server(80);
+
+// Define the LDR pin and Servo pin
+#define LDR_PIN 2    // Analog pin connected to LDR
+#define SERVO_PIN 5  // Define the pin for Servo
+
+// Create a Servo object
+Servo myServo;
+
+// Global variables to store LDR value and mode selection
+int ldrValue = 0;
+bool controlByMobile = false; // Track control mode
+
+char incomingPacket[255];  // Buffer for incoming packets
+
+void setup() {
+  // Start the serial communication
+  Serial.begin(115200);
+
+  // Initialize the LDR pin as input
+  pinMode(LDR_PIN, INPUT);
+  myServo.attach(SERVO_PIN);  // Attach the Servo to the defined pin
+
+  // Connect to Wi-Fi network
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+
+  // Wait until the ESP32 connects to the Wi-Fi
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to Wi-Fi");
+
+  // Print the IP address of the actuator
+  Serial.print("Actuator IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  // Start listening on the UDP port
+  udp.begin(udpPort);
+
+  // Set up web server routes
+  server.on("/", handleRoot);                 // Root page
+  server.on("/ldrControl", handleLDRControl); // LDR control page
+  server.on("/mobileControl", handleMobileControl); // Mobile control page
+  server.on("/setPosition", handleSetPosition);     // Mobile position control
+  server.begin();  // Start the server
+  Serial.println("HTTP server started.");
+}
+
+void loop() {
+  // Handle any web requests
+  server.handleClient();
+
+  // Read the analog value from the LDR
+  ldrValue = analogRead(LDR_PIN);  // Range: 0 to 4095
+
+  // Determine the control mode (by mobile or by LDR)
+  if (!controlByMobile) {
+    // LDR-based control
+    if (ldrValue >= 0 && ldrValue <= 1000) {
+      myServo.write(160);  // Turn to 160 degrees
+      Serial.println("Servo turned to 160 degrees.");
+    } else if (ldrValue >= 1001 && ldrValue <= 3000) {
+      myServo.write(90);   // Turn to 90 degrees
+      Serial.println("Servo turned to 90 degrees.");
+    } else if (ldrValue >= 3001 && ldrValue <= 5000) {
+      myServo.write(45);   // Turn to 45 degrees
+      Serial.println("Servo turned to 45 degrees.");
+    } else if (ldrValue >= 5001 && ldrValue <= 6000) {
+      myServo.write(35);   // Turn to 35 degrees
+      Serial.println("Servo turned to 35 degrees.");
+    } else if (ldrValue >= 6001 && ldrValue <= 8200) {
+      myServo.write(1);   // Turn to 01 degrees
+      Serial.println("Servo turned to 01 degrees.");
+    } else {
+      Serial.println("LDR value out of range for servo control.");
+    }
+  }
+
+  // Send the LDR value and Servo position to the controller every 2 seconds
+  String message = "LDR:" + String(ldrValue) + " ShadeAngel:" + String(myServo.read()); // Include SERVO position
+  udp.beginPacket(udpAddress, udpPort);        // Prepare to send packet
+  udp.print(message);                           // Send the LDR and Servo position values
+  udp.endPacket();                              // Send the packet
+
+  // Print the LDR value and servo position locally
+  Serial.print("LDR Value: ");
+  Serial.println(ldrValue);
+  Serial.print("Servo Position: ");
+  Serial.println(myServo.read());
+
+  delay(2000);  // Delay for 2 seconds before repeating
+}
+
+// Function to handle the root URL (mode selection)
+void handleRoot() {
+  String html = "<html><head><style>";
+  html += "body { font-family: Arial, sans-serif; background-color: #f0f8ff; text-align: center; }";
+  html += "h1 { font-size: 3em; color: #0077b6; margin-top: 50px; }";
+  html += "h2 { font-size: 2em; color: #0077b6; }";
+  html += "p { font-size: 1.5em; color: #00008b; }";
+  html += "input[type='submit'] { font-size: 1.5em; background-color: #0077b6; color: white; padding: 10px 20px; border: none; cursor: pointer; }";
+  html += "input[type='submit']:hover { background-color: #005f86; }";
+  html += "</style></head><body>";
+  html += "<h1>Welcome to IoT Project: Smart Shade</h1>";
+  
+  // Display current LDR reading and Servo position
+  html += "<h2>Current Light Intensity: " + String(ldrValue) + "</h2>";
+  html += "<h2>Angle of Shade: " + String(myServo.read()) + "°</h2><br>";
+
+  // Control mode selection buttons
+  html += "<p>How would you like to proceed?</p>";
+  html += "<form action=\"/ldrControl\" method=\"GET\">";
+  html += "<input type=\"submit\" value=\"Control by Sensor (Automated)\" />";
+  html += "</form><br>";
+  html += "<form action=\"/mobileControl\" method=\"GET\">";
+  html += "<input type=\"submit\" value=\"Switch to Manual Control\" />";
+  html += "</form>";
+
+  html += "</body></html>";
+  
+  server.send(200, "text/html", html);
+}
+
+// Function to handle LDR control mode
+void handleLDRControl() {
+  controlByMobile = false; // Switch to LDR control mode
+  String html = "<html><head><style>";
+  html += "body { font-family: Arial, sans-serif; background-color: #f0f8ff; text-align: center; }";
+  html += "h1 { font-size: 2.5em; color: #0077b6; margin-top: 50px; }";
+  html += "p { font-size: 1.5em; color: #00008b; }";
+  html += "input[type='submit'] { font-size: 1.5em; background-color: #0077b6; color: white; padding: 10px 20px; border: none; cursor: pointer; }";
+  html += "input[type='submit']:hover { background-color: #005f86; }";
+  html += "</style></head><body>";
+  html += "<h1>LDR Sensor Control</h1>";
+  html += "<p>Servo will now be controlled based on LDR sensor readings.</p>";
+  html += "<form action=\"/\" method=\"GET\">";
+  html += "<input type=\"submit\" value=\"Go Back\" />";
+  html += "</form>";
+  html += "</body></html>";
+  
+  server.send(200, "text/html", html);
+}
+
+// Function to handle mobile control mode
+void handleMobileControl() {
+  controlByMobile = true; // Switch to mobile control mode
+  String html = "<html><head><style>";
+  html += "body { font-family: Arial, sans-serif; background-color: #f0f8ff; text-align: center; }";
+  html += "h1 { font-size: 2.5em; color: #0077b6; margin-top: 50px; }";
+  html += "p { font-size: 1.5em; color: #00008b; }";
+  html += "input[type='number'] { font-size: 1.5em; padding: 10px; margin: 10px; }";
+  html += "input[type='submit'] { font-size: 1.5em; background-color: #0077b6; color: white; padding: 10px 20px; border: none; cursor: pointer; }";
+  html += "input[type='submit']:hover { background-color: #005f86; }";
+  html += "</style></head><body>";
+  html += "<h1>Manual Control</h1>";
+  html += "<form action=\"/setPosition\" method=\"GET\">";
+  html += "<p>Enter Servo Position (0 to 180 degrees):</p>";
+  html += "<input type=\"number\" name=\"position\" min=\"0\" max=\"180\" required>";
+  html += "<input type=\"submit\" value=\"Set Position\">";
+  html += "</form>";
+  html += "<form action=\"/\" method=\"GET\">";
+  html += "<input type=\"submit\" value=\"Go Back\" />";
+  html += "</form>";
+  html += "</body></html>";
+  
+  server.send(200, "text/html", html);
+}
+
+// Function to handle setting the servo position from mobile input
+void handleSetPosition() {
+  if (server.hasArg("position")) {
+    int position = server.arg("position").toInt();
+    if (position >= 0 && position <= 180) {
+      myServo.write(position); // Set servo position
+      String html = "<html><body><h1>Servo position set to " + String(position) + " degrees.</h1>";
+      html += "<form action=\"/\" method=\"GET\">";
+      html += "<input type=\"submit\" value=\"Go Back\" />";
+      html += "</form></body></html>";
+      server.send(200, "text/html", html);
+    } else {
+      server.send(400, "text/plain", "Invalid position");
+    }
+  } else {
+    server.send(400, "text/plain", "Position not specified");
+  }
+}
