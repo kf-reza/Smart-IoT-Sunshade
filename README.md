@@ -75,3 +75,7 @@ changes the position of the sunshade as per the instructions
 from the controller. It operates a servo motor to manually
 adjust the sunshade, guaranteeing that the indoor light levels
 correspond to the user's specified intensity goal.
+
+
+<img width="1476" height="923" alt="image" src="https://github.com/user-attachments/assets/ec6db967-388f-487b-8e7a-4f76bc971416" />
+
