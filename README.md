@@ -23,7 +23,8 @@ between the ESP32-S2 modules and other hardware
 components.
 5. 16x2 LCD Display: For displaying real-time information
 (light intensity and sunshade position).
-Challenges Identified:
+
+#Challenges Identified:
 1. Wireless Communication: One of the key challenges
 encountered was ensuring reliable wireless communication
 between the controller and the actuator. Initially, a direct Wi-Fi
